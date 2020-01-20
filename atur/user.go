@@ -5,11 +5,17 @@ import (
 	"net/http"
 	"restgin/basecon"
 	"restgin/entitas"
+	"strconv"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
+
+type Token struct {
+	UserId uint
+	jwt.StandardClaims
+}
 
 func CreateUser(c *gin.Context) {
 	var err error
@@ -20,7 +26,9 @@ func CreateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"errors": err.Error()})
 	}
 	basecon.Db.Save(&user)
-	sign := jwt.New(jwt.GetSigningMethod("HS256"))
+	var us entitas.User
+	tk := &Token{UserId: us.ID}
+	sign := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	token, err := sign.SignedString([]byte("secret"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"errors": err.Error()})
@@ -34,29 +42,42 @@ func HashPass(ps entitas.User) (string, error) {
 	return string(hash), err
 }
 
-func CheckPass(ps string, hash entitas.User) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash.Password), []byte(ps))
+func CheckPass(ps, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(ps), []byte(hash))
 	return err == nil
 }
 
 func Login(c *gin.Context) {
-	var err error
-	u := &entitas.User{}
-	email := entitas.User{Email: c.PostForm("email")}
-	pass := entitas.User{Password: c.PostForm("password")}
+	var us entitas.User
 
-	basecon.Db.Where("email = ?", email).First(u)
-	if err != nil {
+	email := c.PostForm("email")
+	pass := c.PostForm("password")
+
+	cmail := basecon.Db.Where("email = ?", email).First(&us).Error
+	if cmail != nil {
+
 		c.JSON(http.StatusNotFound, gin.H{"message": "email not found"})
+		return
 	}
-	cp := CheckPass(u.Password, pass)
-	fmt.Println("match", cp)
-	u.Password = ""
-	sign := jwt.New(jwt.GetSigningMethod("HS256"))
+
+	cpass := CheckPass(us.Password, pass)
+	str := strconv.FormatBool(cpass)
+	fmt.Printf("Match : %s \n", str)
+
+	if str != "true" {
+
+		c.JSON(http.StatusNotFound, gin.H{"message": "wrong pass or username"})
+		return
+
+	}
+
+	tk := &Token{UserId: us.ID}
+	sign := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
 	token, err := sign.SignedString([]byte("secret"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"errors": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+		c.Abort()
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "Ok", "token": token})
+	c.JSON(http.StatusOK, gin.H{"message": "ok", "token": token})
 
 }
