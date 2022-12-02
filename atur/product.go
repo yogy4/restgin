@@ -10,10 +10,17 @@ import (
 )
 
 func CreateProduct(c *gin.Context) {
-	var err error
+	// var err error
 	p := entitas.Product{Name: c.PostForm("name"), Price: c.PostForm("price"), ImgUrl: c.PostForm("imageurl")}
+	// for upload
+	f, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"errors": err.Error()})
+	}
+	path := "public/images/" + f.Filename
+	if err := c.SaveUploadedFile(f, path); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"erros": err.Error()})
+		return
 	}
 	basecon.Db.Save(&p)
 	c.JSON(http.StatusCreated, gin.H{"status": "ok", "result": p})

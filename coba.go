@@ -11,6 +11,8 @@ import (
 func main() {
 
 	router := gin.Default()
+	router.MaxMultipartMemory = 8 << 20 //8 MB
+	router.Static("/upload", "./public")
 
 	auth := router.Group("/auth")
 	{
